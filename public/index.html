@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Hiring Screener</title>
+  <style>
+    :root {
+      --bg: #f6f7fb; --card: #ffffff; --text: #1d2433; --muted: #667085; --border: #e3e7ef;
+      --primary: #3b5bdb; --primary-text: #ffffff;
+      --good: #12805c; --good-bg: #e3f6ee; --mid: #a15c00; --mid-bg: #fff2dc; --bad: #b42318; --bad-bg: #fde7e5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151c; --card: #1b1f29; --text: #e8ebf2; --muted: #9aa3b5; --border: #2c3342;
+        --primary: #7b93ff; --primary-text: #0d1020;
+        --good: #5fd3a5; --good-bg: #173328; --mid: #f2b45c; --mid-bg: #3a2a12; --bad: #ff8a80; --bad-bg: #3d1916;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; }
+    h1 { margin: 0; font-size: 1.7rem; }
+    .lead { color: var(--muted); margin: 4px 0 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    h2 { font-size: 1.05rem; margin: 0 0 10px; }
+    textarea { width: 100%; min-height: 140px; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+               background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    button { font: inherit; border-radius: 10px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--border);
+             background: var(--card); color: var(--text); }
+    button.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); font-weight: 600; }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .hint { color: var(--muted); font-size: 0.88rem; }
+    #status { margin: 8px 0 0; font-weight: 600; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+    .score { font-weight: 700; font-size: 1.1rem; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 600; }
+    .Interview { color: var(--good); background: var(--good-bg); }
+    .Maybe { color: var(--mid); background: var(--mid-bg); }
+    .Reject { color: var(--bad); background: var(--bad-bg); }
+    .error { color: var(--bad); }
+    .hidden { display: none !important; }
+    footer { color: var(--muted); font-size: 0.85rem; margin-top: 20px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🧑‍💼 AI Hiring Screener</h1>
+  <p class="lead">Paste a job description, add CVs, and get a ranked shortlist with scores, strengths, and gaps.</p>
+
+  <!-- 1. Job description -->
+  <section class="card">
+    <h2>1. Job description</h2>
+    <textarea id="jd" placeholder="Role, must-have requirements, nice-to-haves…"></textarea>
+    <div class="row">
+      <button id="sampleJd">Load sample job</button>
+    </div>
+  </section>
+
+  <!-- 2. Candidates -->
+  <section class="card">
+    <h2>2. Candidates</h2>
+    <p class="hint">Upload CV files (PDF or TXT, up to 4 MB each), and/or paste CVs below, separated by a line containing only <code>---</code>.</p>
+    <input id="files" type="file" accept=".pdf,.txt" multiple />
+    <textarea id="pasted" placeholder="Paste one or more CVs here, separated by ---"></textarea>
+    <div class="row">
+      <button id="sampleCvs">Load sample CVs</button>
+      <button id="screen" class="primary">Screen candidates</button>
+    </div>
+    <p id="status"></p>
+  </section>
+
+  <!-- 3. Results -->
+  <section id="resultsCard" class="card hidden">
+    <h2>3. Ranked shortlist</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Candidate</th><th>Score</th><th>Recommendation</th><th>Strengths</th><th>Gaps</th></tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button id="exportCsv">⬇ Export CSV</button>
+    </div>
+  </section>
+
+  <footer>
+    CVs are processed in memory to generate the assessment and are not stored by this app.
+    Scores consider only job-relevant skills and experience. AI can make mistakes: always review before deciding.
+  </footer>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let results = [];                       // all screened candidates, kept for sorting and export
+
+  // ---- Sample data for a quick demo ----
+  const SAMPLE_JD = `Role: Junior SEO Content Writer
+Must have: SEO knowledge (keyword research, on-page SEO), strong written English, 1+ year writing web content.
+Nice to have: WordPress, AI writing tools, experience writing for multiple brands or clients.`;
+
+  const SAMPLE_CVS = `Ayesha Khan — Content writer, 2.5 years at a digital agency writing SEO blogs for 6 client brands. Ahrefs, SEMrush, Yoast, WordPress. Grew a client's organic traffic by 140%. Uses ChatGPT and Claude for outlines.
+---
+Usman Tariq — BBA Marketing graduate. 3-month internship writing social media captions and two blog posts. Online SEO basics course. Good English. Canva, Google Docs.
+---
+Kamran Shah — Sales representative for 3 years at a mobile phone shop. Good with customers and meeting targets. Basic MS Word. No writing or marketing experience.`;
+
+  $("sampleJd").onclick = () => { $("jd").value = SAMPLE_JD; };
+  $("sampleCvs").onclick = () => { $("pasted").value = SAMPLE_CVS; };
+
+  // ---- Build the list of candidates to screen (files + pasted texts) ----
+  function collectCandidates() {
+    const items = [...$("files").files].map((file) => ({ label: file.name, file }));
+    $("pasted").value
+      .split(/^\s*---\s*$/m)             // split on lines containing only ---
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .forEach((text, i) => items.push({ label: `Pasted CV ${i + 1}`, text }));
+    return items;
+  }
+
+  // ---- Screen ONE candidate by calling the API ----
+  async function screenOne(jd, item) {
+    const form = new FormData();
+    form.append("job_description", jd);
+    if (item.file) form.append("cv_file", item.file);
+    else form.append("cv_text", item.text);
+    const res = await fetch("/api/screen", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+    return data;
+  }
+
+  // ---- Screen all candidates one by one (keeps each request small and avoids rate limits) ----
+  $("screen").onclick = async () => {
+    const jd = $("jd").value.trim();
+    const items = collectCandidates();
+    if (!jd) return setStatus("Please add a job description.", true);
+    if (!items.length) return setStatus("Please upload or paste at least one CV.", true);
+
+    $("screen").disabled = true;
+    results = [];
+    render();
+    for (let i = 0; i < items.length; i++) {
+      setStatus(`Screening ${i + 1} of ${items.length}: ${items[i].label}…`);
+      try {
+        const r = await screenOne(jd, items[i]);
+        results.push({ ...r, source: items[i].label });
+      } catch (err) {
+        results.push({ candidate_name: items[i].label, score: 0, recommendation: "Error",
+                       strengths: "", gaps: err.message, summary: "", source: items[i].label });
+        if (err.message.includes("quota")) { setStatus(err.message, true); break; }  // stop if quota is used up
+      }
+      render();                           // update the table after every candidate
+    }
+    const shortlisted = results.filter((r) => r.recommendation === "Interview").length;
+    setStatus(`Done: ${results.length} screened, ${shortlisted} recommended for interview.`);
+    $("screen").disabled = false;
+  };
+
+  function setStatus(text, isError = false) {
+    $("status").textContent = text;
+    $("status").className = isError ? "error" : "";
+  }
+
+  // ---- Show results, highest score first ----
+  function render() {
+    $("resultsCard").classList.toggle("hidden", results.length === 0);
+    const tbody = $("results");
+    tbody.innerHTML = "";
+    [...results].sort((a, b) => b.score - a.score).forEach((r, i) => {
+      const tr = document.createElement("tr");
+      const cells = [
+        String(i + 1),
+        `${r.candidate_name}\n${r.summary || ""}`,
+        r.score ? `${r.score}/10` : "–",
+        r.recommendation,
+        r.strengths,
+        r.gaps,
+      ];
+      cells.forEach((value, col) => {
+        const td = document.createElement("td");
+        if (col === 2) td.className = "score";
+        if (col === 3) {                  // coloured badge for the recommendation
+          const span = document.createElement("span");
+          span.className = `badge ${value}`;
+          span.textContent = value;
+          td.appendChild(span);
+        } else {
+          td.textContent = value;         // textContent keeps CV text from being run as HTML
+          td.style.whiteSpace = "pre-line";
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---- Download the results as a CSV file (opens in Excel / Google Sheets) ----
+  $("exportCsv").onclick = () => {
+    const header = ["rank", "candidate", "score", "recommendation", "strengths", "gaps", "summary", "source"];
+    const quote = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = [...results].sort((a, b) => b.score - a.score).map((r, i) =>
+      [i + 1, r.candidate_name, r.score, r.recommendation, r.strengths, r.gaps, r.summary, r.source].map(quote).join(","));
+    const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "shortlist.csv";
+    link.click();
+  };
+</script>
+</body>
+</html>
