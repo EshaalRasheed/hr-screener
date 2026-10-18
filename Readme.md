@@ -1,6 +1,6 @@
 # 🧑‍💼 AI Hiring Screener
 
-**🔗 Live demo:** [your-link.vercel.app](https://your-link.vercel.app)
+**🔗 Live demo:** [your-link.vercel.app](https://hr-screener-bay.vercel.app/)
 
 AI Hiring Screener is a web app that screens CVs against a job description. Paste a job description, upload CVs as PDF or TXT files (or paste them as text), and the app uses Google Gemini to score each candidate from 1 to 10. Every candidate gets a recommendation (Interview, Maybe, or Reject) along with their key strengths, gaps, and a one-line summary. Results appear in a ranked shortlist that can be exported as a CSV file for Excel or Google Sheets.
 
